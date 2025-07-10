@@ -73,9 +73,9 @@ def filter_json_fields(input_file, fields_to_keep, output_file=None, inplace=Fal
         outfile.write("[\n")
         first = True
 
-        for item in ijson.items(infile, 'item'):
-            filtered = {k: v for k, v in item.items() if k in fields_to_keep}
-
+        for card in ijson.items(infile, 'item'):
+            filtered = {k: v for k, v in card.items() if k in fields_to_keep}
+            
             if not first:
                 outfile.write(",\n")
             else:
@@ -93,6 +93,7 @@ def filter_json_fields(input_file, fields_to_keep, output_file=None, inplace=Fal
 def filter_data_by_relevance(input_file, json_path='item'):
     """
     Filters the dataset in-place to retain only 'relevant' cards for semantic analysis.
+    Also merges multi-faced cards into a single card for later use.
     Relevance rules:
     - Excludes Basic Lands
     - Excludes tokens
@@ -139,6 +140,19 @@ def filter_data_by_relevance(input_file, json_path='item'):
         first = True
 
         for card in ijson.items(infile, json_path):
+
+            # if handling a multi-faced card, merge fields and bring them to top-level
+            if not card.get("oracle_text") and isinstance(card.get("card_faces"), list):
+                faces = card["card_faces"]
+                card["oracle_text"] = "\n".join(f.get("oracle_text", "") for f in faces if f.get("oracle_text"))
+                card["type_line"] = " // ".join(f.get("type_line", "") for f in faces if f.get("type_line"))
+                card["name"] = " // ".join(f.get("name", "") for f in faces if f.get("name"))
+                card["mana_cost"] = " // ".join(f.get("mana_cost", "") for f in faces if f.get("mana_cost"))
+                all_keywords = set()
+                for f in faces:
+                    all_keywords.update(f.get("keywords", []))
+                card["keywords"] = list(all_keywords)
+
             if not is_relevant(card):
                 continue
 
@@ -158,7 +172,7 @@ def filter_data_by_relevance(input_file, json_path='item'):
                 first = False
             json.dump(card, outfile, ensure_ascii=False,
                 default=lambda o: float(o) if isinstance(o, decimal.Decimal) else str(o))
-        
+
         outfile.write("\n]")
 
     # Replace original file with filtered version
@@ -213,6 +227,26 @@ def get_monocolored_cards(input_file, output_file, json_path='item'):
         outfile.write("\n]")
 
 
+def count_cards(file_path):
+    total = 0
+    monocolored = 0
+    multicolored = 0
+    with open(file_path, 'r', encoding='utf-8') as f:
+        print('Reading data...')
+        for card in ijson.items(f, 'item'):
+            total += 1
+            colors = card.get("color_identity", [])
+            if isinstance(colors, list):
+                if len(colors) == 1:
+                    monocolored += 1
+                elif len(colors) > 1:
+                    multicolored += 1
+    print(f"Total cards: {total}")
+    print(f"Monocolored cards: {monocolored} ({monocolored / total:.2%})")
+    print(f"Multicolored cards: {multicolored} ({multicolored / total:.2%})\n")
+
+
+
 if __name__ == "__main__":
     
     download = input("Download fresher data? (Y/N): ").strip().lower() == "y"
@@ -224,19 +258,25 @@ if __name__ == "__main__":
         download_data(raw_data)
 
 
-    print("Applying filters to clean data...")
-    filter_data(raw_data, filtered_data)
-
-    print("All done")
-
-    def count_cards(file_path):
-        count = 0
-        with open(file_path, 'r', encoding='utf-8') as f:
-            print('reading raw data')
-            for _ in ijson.items(f, 'item'):
-                count += 1
-        print(f"downloaded cards: {count}")
+    #filter_data(raw_data, clean_data)
 
     count_cards(raw_data)
     count_cards(clean_data)
     count_cards(monocolored_data)
+
+    """
+    Reading data...
+    Total cards: 107798
+    Monocolored cards: 74058 (68.70%)
+    Multicolored cards: 18991 (17.62%)
+
+    Reading data...
+    Total cards: 28746
+    Monocolored cards: 23835 (82.92%)
+    Multicolored cards: 4911 (17.08%)
+
+    Reading data...
+    Total cards: 23351
+    Monocolored cards: 23351 (100.00%)
+    Multicolored cards: 0 (0.00%)
+    """
