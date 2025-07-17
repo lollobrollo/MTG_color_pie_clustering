@@ -101,7 +101,6 @@ def filter_data_by_relevance(input_file, json_path='item'):
     - Excludes cards not printed in paper
     - Excludes non-english cards
     - Excludes cards not meant for structured play (mostly the un-sets)
-    - Keeps only one card per oracle_id
     Output:
     - Writes to a temporary file first
     - Then overwrites the original file with the filtered version
@@ -128,7 +127,7 @@ def filter_data_by_relevance(input_file, json_path='item'):
             return False
         return True
     
-    seen_oracle_ids = set() # used to check for duplicates
+    seen_cards = set()  # Store (oracle_id, released_at) pairs
 
     # Create a temporary file in the same directory
     temp_fd, temp_path = tempfile.mkstemp(suffix=".json", dir=os.path.dirname(input_file))
@@ -155,12 +154,12 @@ def filter_data_by_relevance(input_file, json_path='item'):
 
             if not is_relevant(card):
                 continue
-
-            # check if it's a duplicate (same card as one already seen, the difference is not relevant, e.g. promo stamp)
-            oid = card.get("oracle_id")
-            if not oid or oid in seen_oracle_ids:
+            
+            # Keep one copy per printing date (e.g. ignore foils) 
+            key = (card.get("oracle_id"), card.get("released_at"))
+            if key in seen_cards:
                 continue
-            seen_oracle_ids.add(oid)
+            seen_cards.add(key)
 
             # If the card is colorless, update its color identity
             if len(card.get("color_identity", [])) == 0:
@@ -188,7 +187,7 @@ def filter_data(raw_data, clean_data):
     print(f"Applying filters...")
     
     keep_fields = {
-    "oracle_text", "type_line", "name", "lang", "keywords", "mana_cost", "colors",
+    "id", "oracle_text", "type_line", "name", "lang", "keywords", "mana_cost", "colors",
     "color_identity", "games", "layout", "card_faces", "color_indicator",
     "hand_modifier", "life_modifier", "oracle_id", "released_at", "set", "set_name",
     "border_color", "security_stamp", "set_type", "legalities"
@@ -198,9 +197,9 @@ def filter_data(raw_data, clean_data):
     filter_data_by_relevance(clean_data)
 
     keep_fields ={
-    "oracle_text", "type_line", "name", "keywords", "mana_cost", "colors",
-    "color_identity", "layout", "card_faces",
-    "hand_modifier", "life_modifier", "released_at", "set", "set_name"
+    "id", "oracle_id", "name", "set", "set_name", "oracle_text",
+    "type_line", "mana_cost", "colors", "color_identity",
+    "keywords", "hand_modifier", "life_modifier", "released_at"
     }
     filter_json_fields(clean_data, keep_fields, inplace = True)
 
@@ -252,7 +251,7 @@ if __name__ == "__main__":
     download = input("Download fresher data? (Y/N): ").strip().lower() == "y"
     raw_data = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "raw_cards.json"))
     clean_data = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "clean_cards.json"))
-    monocolored_data = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "monocolored.json"))
+    monocolored_data = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "monocol.json"))
 
     if download:
         download_data(raw_data)
