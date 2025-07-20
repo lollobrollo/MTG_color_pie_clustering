@@ -32,7 +32,7 @@ def spectral_clustering(emb_path, year, norm = False, n_neigh_umap = 15, umap_co
         random_state=155      # To allow for reproducibility, no parallelism is applied.
         # n_jobs = -1         # Uses all available CPU cores.
     )
-    embeddings = reducer.fit_transform(embeddings)
+    cluster_embeddings = reducer.fit_transform(embeddings)
 
     print("Clustering the reduced data with Spectral Clustering...")
     spectral_cluster = SpectralClustering(
@@ -41,7 +41,7 @@ def spectral_clustering(emb_path, year, norm = False, n_neigh_umap = 15, umap_co
         random_state=155
     )
 
-    cluster_labels = spectral_cluster.fit_predict(embeddings)
+    cluster_labels = spectral_cluster.fit_predict(cluster_embeddings)
 
     perform_clustering_validation(true_labels, cluster_labels)
 
@@ -79,7 +79,7 @@ def spectral_clustering_v2(emb_path, year, norm = False, n_neigh_umap = 12, umap
         random_state=155      # To allow for reproducibility, no parallelism is applied.
         # n_jobs = -1         # Uses all available CPU cores.
     )
-    embeddings = reducer.fit_transform(embeddings)
+    cluster_embeddings = reducer.fit_transform(embeddings)
 
     print("Clustering the reduced data with Spectral Clustering...")
     spectral_cluster = SpectralClustering(
@@ -88,7 +88,7 @@ def spectral_clustering_v2(emb_path, year, norm = False, n_neigh_umap = 12, umap
         random_state=155
     )
 
-    cluster_labels = spectral_cluster.fit_predict(embeddings)
+    cluster_labels = spectral_cluster.fit_predict(cluster_embeddings)
 
     perform_clustering_validation(true_labels, cluster_labels)
 
@@ -137,7 +137,7 @@ def hdbscan_clustering(emb_path, year, norm = False, n_neigh_umap = 15, umap_com
         random_state=155      # To allow for reproducibility, no parallelism is applied.
         # n_jobs = -1         # Uses all available CPU cores.
     )
-    embeddings = reducer.fit_transform(embeddings)
+    cluster_embeddings = reducer.fit_transform(embeddings)
 
     print("Clustering the reduced data with HDBSCAN...")
     clusterer = HDBSCAN(
@@ -146,7 +146,7 @@ def hdbscan_clustering(emb_path, year, norm = False, n_neigh_umap = 15, umap_com
         cluster_selection_epsilon = hdbscan_eps,
         metric='euclidean'
     )
-    cluster_labels = clusterer.fit_predict(embeddings)
+    cluster_labels = clusterer.fit_predict(cluster_embeddings)
 
     perform_clustering_validation(true_labels, cluster_labels)
 
@@ -156,7 +156,7 @@ def hdbscan_clustering(emb_path, year, norm = False, n_neigh_umap = 15, umap_com
 
     # Create a DataFrame for plotting
     vis_df = pd.DataFrame(vis_embedding, columns=('x', 'y'))
-    vis_df['clustered_labels'] = clusterer.labels_
+    vis_df['clustered_labels'] = cluster_labels
     vis_df['true_labels'] = true_labels.values
 
     plot_results(vis_df)
