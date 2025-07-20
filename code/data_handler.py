@@ -6,6 +6,9 @@ import gzip
 import decimal
 import os
 import tempfile
+import pandas as pd
+from datetime import datetime
+import re
 
 def download_data(output_path):
     """
@@ -55,10 +58,10 @@ def filter_json_fields(input_file, fields_to_keep, output_file=None, inplace=Fal
     Filters a JSON file by keeping only the specified fields in each object.
 
     Args:
-        input_file (str): Path to the input JSON file.
-        fields_to_keep (set): Fields to retain in each JSON object.
-        output_file (str): Output path (ignored if inplace=True).
-        inplace (bool): If True, overwrite the input file with filtered data.
+        - input_file (str) : Path to the input JSON file.
+        - fields_to_keep (set) : Fields to retain in each JSON object.
+        - output_file (str) : Output path (ignored if inplace=True).
+        - inplace (bool) : If True, overwrite the input file with filtered data.
     """
 
     if inplace:
@@ -178,10 +181,11 @@ def filter_data_by_relevance(input_file, json_path='item'):
     shutil.move(temp_path, input_file)
 
 
-def filter_data(raw_data, clean_data):
+def filter_data(raw_data, clean_data, show=False):
     """
     Function that cals all filters in one place and returns the file path of the cleaned data.
     Returns the fields that have been kept after remopving useless ones and the ones useful only in preprocessing.
+    If 'show' == True, print the head of the cleaned dataset
     """
 
     print(f"Applying filters...")
@@ -215,7 +219,7 @@ def get_monocolored_cards(input_file, output_file, json_path='item'):
         outfile.write("[\n")
         first = True
         for card in ijson.items(infile, json_path):
-            colors = card.get("color_identity", [])
+            colors = card.get("colors", [])
             if isinstance(colors, list) and len(colors) == 1:
                 if not first:
                     outfile.write(",\n")
@@ -234,7 +238,7 @@ def count_cards(file_path):
         print('Reading data...')
         for card in ijson.items(f, 'item'):
             total += 1
-            colors = card.get("color_identity", [])
+            colors = card.get("colors", [])
             if isinstance(colors, list):
                 if len(colors) == 1:
                     monocolored += 1
@@ -248,34 +252,97 @@ def count_cards(file_path):
 
 if __name__ == "__main__":
     
-    download = input("Download fresher data? (Y/N): ").strip().lower() == "y"
+    # download = input("Download fresher data? (Y/N): ").strip().lower() == "y"
     raw_data = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "raw_cards.json"))
     clean_data = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "clean_cards.json"))
     monocolored_data = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "monocol.json"))
 
-    if download:
-        download_data(raw_data)
+    # if download:
+    #     download_data(raw_data)
 
 
     #filter_data(raw_data, clean_data)
 
+    """
     count_cards(raw_data)
     count_cards(clean_data)
     count_cards(monocolored_data)
 
-    """
     Reading data...
-    Total cards: 107798
-    Monocolored cards: 74058 (68.70%)
-    Multicolored cards: 18991 (17.62%)
+    Total cards: 108565
+    Monocolored cards: 68330 (62.94%)
+    Multicolored cards: 13171 (12.13%)
 
     Reading data...
-    Total cards: 28746
-    Monocolored cards: 23835 (82.92%)
-    Multicolored cards: 4911 (17.08%)
+    Total cards: 65551
+    Reading data...
+    Total cards: 65551
+    Monocolored cards: 45925 (70.06%)
+    Multicolored cards: 7248 (11.06%)
 
     Reading data...
-    Total cards: 23351
-    Monocolored cards: 23351 (100.00%)
+    Total cards: 45925
+    Monocolored cards: 45925 (100.00%)
     Multicolored cards: 0 (0.00%)
     """
+
+    # df = pd.read_parquet("hf://datasets/minimaxir/mtg-embeddings/mtg_embeddings.parquet")
+    # df.head()
+    # hf_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "data.parquet"))
+    # df.to_parquet(hf_path)
+
+    
+    # Add a column to the dataframe in data.parquet with all printing years associated to the cards (rows) 
+    set_year_dict = {}
+    with open(clean_data, 'r', encoding='utf-8') as f:
+        for card in ijson.items(f, 'item'):
+            set_name = card.get("set")
+            released_at = card.get("released_at")
+          
+            if set_name and released_at:
+                set_name = set_name.upper()
+                year = datetime.strptime(released_at, "%Y-%m-%d").year
+                if set_name not in set_year_dict:
+                    set_year_dict[set_name] = year
+                else:
+                    set_year_dict[set_name] = max(set_year_dict[set_name], year)
+    #print(f"Here's the dict: {set_year_dict}")
+    
+    parquet_old = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "parquet", "data.parquet"))
+    parquet_new = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "parquet", "data_new.parquet"))
+
+    df = pd.read_parquet(parquet_old)
+    
+    def get_print_years(sets):
+        return sorted({set_year_dict.get(str(s).upper()) for s in sets if str(s).upper() in set_year_dict})
+    # Apply the mapping
+    df['print_years'] = df['sets'].apply(get_print_years)
+
+    # Remove missed cards
+    initial_count = len(df)
+    for idx, row in df[df['print_years'].map(lambda x: len(x) == 0)].head(1).iterrows():
+        print("Example of removed row:")
+        print(row)
+    df = df[df['print_years'].map(lambda x: len(x) > 0)]
+    removed_count = initial_count - len(df)
+    print(f"Rows removed due to missing printing year: {removed_count}\nRemaining rows: {len(df)}")
+
+    df.to_parquet(parquet_new, index=False)
+    
+    df = pd.read_parquet(parquet_new)
+    def extract_colors(mana_cost):
+        if not isinstance(mana_cost, str):
+            return []
+        symbols = re.findall(r'{(.*?)}', mana_cost)
+        symbols = [s for s in symbols if s in ['W','U','R','B','G']]
+        return sorted(symbols)
+
+    # Apply to DataFrame
+    df['colors'] = df['manaCost'].apply(extract_colors)
+    df.to_parquet(parquet_new)
+
+    # Only keep monocolored
+    df = df[df['colors'].apply(lambda x: isinstance(x, list) and len(x) == 1)]
+
+    parquet_monocol = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "parquet", "monocol.parquet"))
+    df.to_parquet(parquet_monocol)

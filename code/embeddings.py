@@ -16,8 +16,8 @@ def get_card_text(card):
 
 
 def create_embeddings(data_path, emb_path, model="all-MiniLM-L6-v2"):
-
-    model = SentenceTransformer(model, device = "cuda" if cuda.is_available() else "cpu")
+    device = "cuda" if cuda.is_available() else "cpu"
+    model = SentenceTransformer(model, device = device)
     embeddings = []
     texts = []
     with open(data_path, 'r', encoding='utf-8') as file:
@@ -25,9 +25,9 @@ def create_embeddings(data_path, emb_path, model="all-MiniLM-L6-v2"):
             texts.append(get_card_text(card))
             embeddings.append({"id": card.get("id"),
                                "name": card.get("name"),
-                               "color": card.get("colors"),
                                "color_id": card.get("color_identity"),
-                               "year": datetime.strptime(card.get("released_at"), "%Y-%m-%d").year,
+                               "colors": card.get("colors"),
+                               "year": datetime.strptime(card.get("released_at"), "%Y-%m-%d").year, # Integer
                                "text": texts[-1],
                                "embedding":""})
     embedding_vectors = model.encode(texts, show_progress_bar=True)
